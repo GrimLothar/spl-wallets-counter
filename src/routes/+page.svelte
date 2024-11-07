@@ -29,6 +29,7 @@
   let individualBalances:TokenBalance[] = [];
   let totalSupply = 0;
   let percentageOfSupply = 0;
+  let duplicatesRemoved = 0;
 
   let connection:Connection;
 
@@ -56,6 +57,12 @@
     } catch (err) {
       error = `Invalid connection URL: ${err instanceof Error ? err.message : String(err)}`;
     }
+  }
+
+  function removeDuplicates(addresses: string[]): string[] {
+    const uniqueAddresses = [...new Set(addresses)];
+    duplicatesRemoved = addresses.length - uniqueAddresses.length;
+    return uniqueAddresses;
   }
 
   async function getTotalSupply(mintAddress: string): Promise<number> {
@@ -141,16 +148,23 @@
     totalBalance = 0;
     totalSupply = 0;
     percentageOfSupply = 0;
+    duplicatesRemoved = 0;
 
     try {
       // Get total supply first
       totalSupply = await getTotalSupply(tokenAddress);
 
       // Split addresses and remove empty lines
-      const addresses = walletAddresses
+      let addresses = walletAddresses
         .split('\n')
         .map(addr => addr.trim())
         .filter((addr): addr is string => !!addr);
+
+      // Remove duplicates and update the textarea
+      addresses = removeDuplicates(addresses);
+      if (duplicatesRemoved > 0) {
+        walletAddresses = addresses.join('\n');
+      }
 
       // Validate wallet addresses
       for (const addr of addresses) {
@@ -238,6 +252,12 @@
   {#if error}
     <div class="mt-4 p-2 bg-red-100 text-red-700 rounded">
       {error}
+    </div>
+  {/if}
+
+  {#if duplicatesRemoved > 0}
+    <div class="mt-4 p-2 bg-blue-100 text-blue-700 rounded">
+      Removed {duplicatesRemoved} duplicate {duplicatesRemoved === 1 ? 'address' : 'addresses'} from the list.
     </div>
   {/if}
 
