@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Connection, PublicKey } from '@solana/web3.js'
   import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+  import { browser } from '$app/environment';
   import { onMount } from 'svelte';
 
   interface TokenBalance {
@@ -14,10 +15,12 @@
   const DEFAULT_RPC = 'https://api.mainnet-beta.solana.com';
   const DEFAULT_TOKEN = '92kxUXDsBQLy5ptGxtmH9CDYd5E6ZQynzf2eFPiUpump';
 
-  // Initialize with localStorage values or defaults
+  let isInitialized = false;  // Track initialization state
+
+  // Initialize without defaults
   let walletAddresses = '';
-  let connectionUrl = DEFAULT_RPC;
-  let tokenAddress = DEFAULT_TOKEN;
+  let connectionUrl = '';
+  let tokenAddress = '';
 
   // Other state variables
   let totalBalance = 0;
@@ -29,24 +32,21 @@
 
   let connection:Connection;
 
-  // Load saved values on mount
+  // Initialize values from localStorage once mounted
   onMount(() => {
-    const savedUrl = localStorage.getItem('connectionUrl');
-    const savedToken = localStorage.getItem('tokenAddress');
-    const savedWallets = localStorage.getItem('walletAddresses');
-
-    if (savedUrl) connectionUrl = savedUrl;
-    if (savedToken) tokenAddress = savedToken;
-    if (savedWallets) walletAddresses = savedWallets;
+    if (browser) {
+      connectionUrl = localStorage.getItem('connectionUrl') || DEFAULT_RPC;
+      tokenAddress = localStorage.getItem('tokenAddress') || DEFAULT_TOKEN;
+      walletAddresses = localStorage.getItem('walletAddresses') || '';
+      isInitialized = true;
+    }
   });
 
-  // Save values whenever they change
-  $: {
-    if (typeof window !== 'undefined') { // Check for browser environment
-      localStorage.setItem('connectionUrl', connectionUrl);
-      localStorage.setItem('tokenAddress', tokenAddress);
-      localStorage.setItem('walletAddresses', walletAddresses);
-    }
+  // Save values whenever they change, but only in browser
+  $: if (browser && isInitialized) {
+    localStorage.setItem('connectionUrl', connectionUrl);
+    localStorage.setItem('tokenAddress', tokenAddress);
+    localStorage.setItem('walletAddresses', walletAddresses);
   }
     
   $: {
@@ -175,6 +175,11 @@
   }
 </script>
 
+{#if !isInitialized}
+  <div class="flex justify-center items-center min-h-screen">
+    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+  </div>
+{:else}
 <div class="container mx-auto p-4 max-w-2xl">
   <h1 class="text-2xl font-bold mb-4">SPL Token Balance Checker</h1>
   
@@ -269,3 +274,4 @@
     </div>
   {/if}
 </div>
+{/if}
