@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Connection, PublicKey } from '@solana/web3.js'
+  import type { ParsedAccountData } from '@solana/web3.js';
   import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
   import { browser } from '$app/environment';
   import { onMount } from 'svelte';
@@ -10,6 +11,17 @@
     percentage: number;
     error?: string;
   }
+
+  interface TokenInfo {
+    symbol: string;
+    name: string;
+    decimals: number;
+    usdPrice: number;
+    solPrice: number;
+  }
+
+  let tokenInfo: TokenInfo | null = null;
+  const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
   // Default values
   const DEFAULT_RPC = 'https://api.mainnet-beta.solana.com';
@@ -56,6 +68,40 @@
       connection = new Connection(connectionUrl || 'https://api.mainnet-beta.solana.com');
     } catch (err) {
       error = `Invalid connection URL: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  }
+
+  async function getTokenInfo(mintAddress: string): Promise<TokenInfo | null> {
+    try {
+      // Fetch token info and prices in parallel
+      const [tokenResponse, priceResponse] = await Promise.all([
+        fetch(`https://tokens.jup.ag/token/${mintAddress}`),
+        fetch(`https://api.jup.ag/price/v2?ids=${mintAddress},${SOL_MINT}`)
+      ]);
+
+      if (!tokenResponse.ok || !priceResponse.ok) {
+        return null;
+      }
+      
+      // Parse both JSON responses in parallel
+      const [tokenData, priceData] = await Promise.all([
+        tokenResponse.json(),
+        priceResponse.json()
+      ]);
+
+      const tokenPrice = Number(priceData.data[mintAddress]?.price || 0);
+      const solPrice = Number(priceData.data[SOL_MINT]?.price || 0);
+
+     return {
+        symbol: tokenData.symbol || 'Unknown',
+        name: tokenData.name || 'Unknown',
+        decimals: tokenData.decimals || 0,
+        usdPrice: tokenPrice,
+        solPrice: solPrice > 0 ? tokenPrice / solPrice : 0
+      };
+    } catch (err) {
+      console.warn('Could not fetch token info:', err);
+      return null;
     }
   }
 
@@ -122,6 +168,33 @@
     }
   }
 
+  function getSignificantDecimals(num: number): number {
+    if (num === 0) return 2;
+    
+    // Find first non-zero decimal place and add 4 more places
+    const leadingZeros = -Math.floor(Math.log10(num));
+    return leadingZeros > 0 ? leadingZeros + 4 : 2;
+  }
+
+  function formatNumber(amount: number, currency: 'USD' | 'SOL'): string {
+    const decimals = getSignificantDecimals(amount);
+    
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals
+    }).format(amount);
+  }
+
+  function formatUSD(amount: number): string {
+    return formatNumber(amount, 'USD')
+  }
+
+  function formatSOL(amount: number): string {
+    return formatNumber(amount, 'SOL')
+  }  
+
   async function checkBalances(): Promise<void> {
     if (!walletAddresses.trim()) {
       error = 'Please enter at least one wallet address';
@@ -149,10 +222,17 @@
     totalSupply = 0;
     percentageOfSupply = 0;
     duplicatesRemoved = 0;
+    tokenInfo = null;
 
     try {
-      // Get total supply first
-      totalSupply = await getTotalSupply(tokenAddress);
+      // Get total supply and token info in parallel
+      const [supply, info] = await Promise.all([
+        getTotalSupply(tokenAddress),
+        getTokenInfo(tokenAddress)
+      ]);
+
+      totalSupply = supply;
+      tokenInfo = info;
 
       // Split addresses and remove empty lines
       let addresses = walletAddresses
@@ -265,12 +345,38 @@
     <div class="mt-6">
       <h2 class="text-xl font-semibold mb-2">Results:</h2>
       
+      <div class="mb-4 p-3 bg-gray-50 rounded-lg border">
+        <div class="text-lg font-medium">
+          Token Address: <span class="font-mono">{tokenAddress}</span>
+        </div>
+        {#if tokenInfo}
+          <div class="text-sm text-gray-600 mt-1">
+            {tokenInfo.name} ({tokenInfo.symbol})
+          </div>
+          {#if tokenInfo.usdPrice > 0}
+          <div class="text-sm text-gray-600 mt-1">
+            Current Price: {formatUSD(tokenInfo.usdPrice)} / {formatSOL(tokenInfo.solPrice)}
+          </div>
+          {/if}
+        {/if}
+      </div>
+      
       <div class="mb-4 space-y-2">
         <div>
-          <strong>Total Supply:</strong> {totalSupply.toLocaleString()} tokens
+          <strong>Total Supply:</strong> {totalSupply.toLocaleString()} { tokenInfo ? `$${tokenInfo.symbol}` : 'tokens' }
+          {#if tokenInfo && tokenInfo.usdPrice > 0}
+          <div class="text-sm text-gray-600">
+            MC: {formatUSD(totalSupply * tokenInfo.usdPrice)} / {formatSOL(totalSupply * tokenInfo.solPrice)}
+          </div>
+        {/if}
         </div>
         <div>
-          <strong>Total Balance:</strong> {totalBalance.toLocaleString()} tokens
+          <strong>Total Balance:</strong> {totalBalance.toLocaleString()} { tokenInfo ? `$${tokenInfo.symbol}` : 'tokens' }
+          {#if tokenInfo && tokenInfo.usdPrice > 0}
+          <div class="text-sm text-gray-600">
+            ≈ {formatUSD(totalBalance * tokenInfo.usdPrice)} / {formatSOL(totalBalance * tokenInfo.solPrice)}
+          </div>
+          {/if}
         </div>
         <div>
           <strong>Combined Percentage:</strong> {percentageOfSupply.toFixed(4)}% of total supply
@@ -285,7 +391,12 @@
               <div class="text-red-600 text-sm">{balanceError}</div>
             {:else}
               <div class="text-sm">
-                {balance.toLocaleString()} tokens ({percentage.toFixed(4)}% of supply)
+                {balance.toLocaleString()} { tokenInfo ? `$${tokenInfo.symbol}` : 'tokens' } ({percentage.toFixed(4)}% of supply)
+                {#if tokenInfo && tokenInfo.usdPrice > 0}
+                <div class="text-gray-600">
+                  ≈ {formatUSD(balance * tokenInfo.usdPrice)} / {formatSOL(balance * tokenInfo.solPrice)}
+                </div>
+                {/if}
               </div>
             {/if}
           </div>
