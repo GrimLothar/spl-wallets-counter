@@ -10,18 +10,45 @@
     error?: string;
   }
 
+  // Default values
+  const DEFAULT_RPC = 'https://api.mainnet-beta.solana.com';
+  const DEFAULT_TOKEN = '92kxUXDsBQLy5ptGxtmH9CDYd5E6ZQynzf2eFPiUpump';
+
+  // Initialize with localStorage values or defaults
   let walletAddresses = '';
+  let connectionUrl = DEFAULT_RPC;
+  let tokenAddress = DEFAULT_TOKEN;
+
+  // Other state variables
   let totalBalance = 0;
   let loading = false;
   let error = '';
   let individualBalances:TokenBalance[] = [];
-  let connectionUrl = 'https://api.mainnet-beta.solana.com';
-  let tokenAddress = '92kxUXDsBQLy5ptGxtmH9CDYd5E6ZQynzf2eFPiUpump';
   let totalSupply = 0;
   let percentageOfSupply = 0;
 
   let connection:Connection;
 
+  // Load saved values on mount
+  onMount(() => {
+    const savedUrl = localStorage.getItem('connectionUrl');
+    const savedToken = localStorage.getItem('tokenAddress');
+    const savedWallets = localStorage.getItem('walletAddresses');
+
+    if (savedUrl) connectionUrl = savedUrl;
+    if (savedToken) tokenAddress = savedToken;
+    if (savedWallets) walletAddresses = savedWallets;
+  });
+
+  // Save values whenever they change
+  $: {
+    if (typeof window !== 'undefined') { // Check for browser environment
+      localStorage.setItem('connectionUrl', connectionUrl);
+      localStorage.setItem('tokenAddress', tokenAddress);
+      localStorage.setItem('walletAddresses', walletAddresses);
+    }
+  }
+    
   $: {
     // Update connection whenever URL changes
     try {
