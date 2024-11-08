@@ -1,7 +1,6 @@
 <script lang="ts">
   import { Connection, PublicKey } from '@solana/web3.js'
-  import type { ParsedAccountData } from '@solana/web3.js';
-  import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
+  import { PieChart } from 'layerchart';
   import { browser } from '$app/environment';
   import { onMount } from 'svelte';
 
@@ -295,142 +294,232 @@
       loading = false;
     }
   }
+
+  function generateChartColors(count: number): string[] {
+    return Array(count)
+      .fill(0)
+      .map((_, i) => {
+        // Distribute hues evenly around the color wheel (0-360)
+        const hue = (i * (360 / count)) % 360;
+        // Fixed saturation and lightness for consistent vibrancy
+        const saturation = 65;
+        const lightness = 55;
+        
+        return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+      });
+  }
+
+  function prepareChartData(balances: TokenBalance[], totalSupply: number) {
+    // Calculate total held by our wallets
+    const totalHeld = balances.reduce((sum, b) => sum + b.balance, 0);
+    const remainingSupply = totalSupply - totalHeld;
+    
+    const colors = generateChartColors(2);  // We only need 2 colors now
+
+    return [
+      {
+        address: 'Total Held',
+        value: totalHeld,
+        fullAddress: `Total held by ${balances.length} wallets`,
+        percentage: (totalHeld / totalSupply) * 100,
+        color: colors[0]
+      },
+      {
+        address: 'Remaining Supply',
+        value: remainingSupply,
+        fullAddress: 'Remaining supply',
+        percentage: (remainingSupply / totalSupply) * 100,
+        color: colors[1]
+      }
+    ];
+  }
 </script>
 
 {#if !isInitialized}
   <div class="flex justify-center items-center min-h-screen">
-    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+    <span class="loading loading-spinner loading-lg text-primary"></span>
   </div>
 {:else}
-<div class="container mx-auto p-4 max-w-2xl">
-  <h1 class="text-2xl font-bold mb-4">SPL Token Balance Checker</h1>
+<div class="container mx-auto p-4 max-w-4xl">
+  <h1 class="text-4xl font-bold mb-8 text-primary">SPL Token Balance Checker</h1>
   
-  <div class="mb-4">
-    <label for="connection" class="block mb-2">
-      RPC Connection URL:
-    </label>
-    <input
-      type="text"
-      id="connection"
-      bind:value={connectionUrl}
-      class="w-full p-2 border rounded"
-      placeholder="https://api.mainnet-beta.solana.com"
-    />
-    <p class="text-sm text-gray-600 mt-1">
-      Leave empty to use default mainnet RPC
-    </p>
-  </div>
+  <div class="card bg-base-200 shadow-xl mb-8">
+    <div class="card-body space-y-6">
+      <div class="form-control w-full">
+        <label class="label" for="connection">
+          <span class="label-text">RPC Connection URL:</span>
+        </label>
+        <input
+          type="text"
+          id="connection"
+          bind:value={connectionUrl}
+          class="input input-bordered w-full"
+          placeholder="https://api.mainnet-beta.solana.com"
+        />
+        <label class="label">
+          <span class="label-text-alt">Leave empty to use default mainnet RPC</span>
+        </label>
+      </div>
 
-  <div class="mb-4">
-    <label for="token" class="block mb-2">
-      SPL Token Addresses (one per line):
-    </label>
-    <textarea
-      id="token"
-      bind:value={tokenAddresses}
-      class="w-full h-32 p-2 border rounded font-mono"
-      placeholder="Enter SPL token addresses..."
-    ></textarea>
-    <p class="text-sm text-gray-600 mt-1">
-      Default: PLIE governance token
-    </p>
-  </div>
+      <div class="form-control w-full">
+        <label class="label" for="token">
+          <span class="label-text">SPL Token Addresses (one per line):</span>
+        </label>
+        <textarea
+          id="token"
+          bind:value={tokenAddresses}
+          class="textarea textarea-bordered h-32 font-mono"
+          placeholder="Enter SPL token addresses..."
+        ></textarea>
+        <label class="label">
+          <span class="label-text-alt">Default: PLIE governance token</span>
+        </label>
+      </div>
 
-  <div class="mb-4">
-    <label for="wallets" class="block mb-2">
-      Enter wallet addresses (one per line):
-    </label>
-    <textarea
-      id="wallets"
-      bind:value={walletAddresses}
-      class="w-full h-32 p-2 border rounded font-mono"
-      placeholder="Enter Solana wallet addresses..."
-    ></textarea>
-  </div>
+      <div class="form-control w-full">
+        <label class="label" for="wallets">
+          <span class="label-text">Enter wallet addresses (one per line):</span>
+        </label>
+        <textarea
+          id="wallets"
+          bind:value={walletAddresses}
+          class="textarea textarea-bordered h-32 font-mono"
+          placeholder="Enter Solana wallet addresses..."
+        ></textarea>
+      </div>
 
-  <button
-    on:click={checkBalances}
-    class="bg-blue-500 text-white px-4 py-2 rounded disabled:opacity-50"
-    disabled={loading}
-  >
-    {loading ? 'Checking...' : 'Check Balances'}
-  </button>
+      <button
+        on:click={checkBalances}
+        class="btn btn-primary w-full"
+        disabled={loading}
+      >
+        {#if loading}
+          <span class="loading loading-spinner"></span>
+          Checking...
+        {:else}
+          Check Balances
+        {/if}
+      </button>
 
-  {#if error}
-    <div class="mt-4 p-2 bg-red-100 text-red-700 rounded">
-      {error}
+      {#if error}
+        <div class="alert alert-error">
+          <svg xmlns="http://www.w3.org/2000/svg" class="stroke-current shrink-0 h-6 w-6" fill="none" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          <span>{error}</span>
+        </div>
+      {/if}
+
+      {#if duplicatesRemoved > 0}
+        <div class="alert alert-info">
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          <span>Removed {duplicatesRemoved} duplicate {duplicatesRemoved === 1 ? 'address' : 'addresses'} from the list.</span>
+        </div>
+      {/if}
     </div>
-  {/if}
-
-  {#if duplicatesRemoved > 0}
-    <div class="mt-4 p-2 bg-blue-100 text-blue-700 rounded">
-      Removed {duplicatesRemoved} duplicate {duplicatesRemoved === 1 ? 'address' : 'addresses'} from the list.
-    </div>
-  {/if}
+  </div>
 
   {#if tokenResults.length > 0}
-  <div class="mt-6 space-y-8">
-    {#each tokenResults as result}
-      <div class="border rounded-lg p-4 bg-white shadow-sm">
-        <h3 class="text-xl font-semibold mb-4">Results for Token: {result.address}</h3>
-        
-        {#if result.info}
-        <div class="mb-4 p-3 bg-gray-50 rounded-lg border">
-            <div class="text-sm text-gray-600 mt-1">
-              {result.info.name} ({result.info.symbol})
-            </div>
-            {#if result.info.usdPrice > 0}
-              <div class="text-sm text-gray-600 mt-1">
-                Current Price: {formatUSD(result.info.usdPrice)} / {formatSOL(result.info.solPrice)}
-              </div>
-            {/if}
-        </div>
-        {/if}
-        
-        <div class="mb-4 space-y-2">
-          <div>
-            <strong>Total Supply:</strong> {result.totalSupply.toLocaleString()} tokens
-            {#if result.info && result.info.usdPrice > 0}
-              <div class="text-sm text-gray-600">
-                MC: {formatUSD(result.totalSupply * result.info.usdPrice)} / {formatSOL(result.totalSupply * result.info.solPrice)}
-              </div>
-            {/if}
-          </div>
-          <div>
-            <strong>Total Balance:</strong> {result.totalBalance.toLocaleString()} tokens
-            {#if result.info && result.info?.usdPrice > 0}
-              <div class="text-sm text-gray-600">
-                ≈ {formatUSD(result.totalBalance * result.info.usdPrice)} / {formatSOL(result.totalBalance * result.info.solPrice)}
-              </div>
-            {/if}
-          </div>
-          <div>
-            <strong>Combined Percentage:</strong> {result.percentageOfSupply.toFixed(4)}% of total supply
-          </div>
-        </div>
-
-        <div class="border rounded">
-          {#each result.balances as { address, balance, percentage, error: balanceError }}
-            <div class="p-2 border-b last:border-b-0">
-              <div class="font-mono text-sm break-all">{address}</div>
-              {#if balanceError}
-                <div class="text-red-600 text-sm">{balanceError}</div>
-              {:else}
-                <div class="text-sm">
-                  {balance.toLocaleString()} tokens ({percentage.toFixed(4)}% of supply)
-                  {#if result.info && result.info?.usdPrice > 0}
-                    <div class="text-gray-600">
-                      ≈ {formatUSD(balance * result.info.usdPrice)} / {formatSOL(balance * result.info.solPrice)}
-                    </div>
-                  {/if}
+    <div class="space-y-8">
+      {#each tokenResults as result}
+        <div class="card bg-base-200 shadow-xl">
+          <div class="card-body">
+            <h3 class="card-title text-primary text-2xl">
+              Token Results
+              <div class="badge badge-secondary font-mono text-xs">{result.address}</div>
+            </h3>
+            
+            {#if result.info}
+              <div class="bg-base-300 rounded-box p-4">
+                <div class="text-lg font-semibold">
+                  {result.info.name} ({result.info.symbol})
                 </div>
-              {/if}
+                {#if result.info.usdPrice > 0}
+                  <div class="text-sm opacity-75">
+                    Current Price: {formatUSD(result.info.usdPrice)} / {formatSOL(result.info.solPrice)}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+            
+            <div class="stats stats-vertical lg:stats-horizontal shadow bg-base-300 w-full">
+              <div class="stat">
+                <div class="stat-title">Total Supply</div>
+                <div class="stat-value text-lg">{result.totalSupply.toLocaleString()}</div>
+                {#if result.info && result.info.usdPrice > 0}
+                  <div class="stat-desc">
+                    MC: {formatUSD(result.totalSupply * result.info.usdPrice)} / {formatSOL(result.totalSupply * result.info.solPrice)}
+                  </div>
+                {/if}
+              </div>
+              
+              <div class="stat">
+                <div class="stat-title">Total Balance</div>
+                <div class="stat-value text-lg">{result.totalBalance.toLocaleString()}</div>
+                {#if result.info && result.info.usdPrice > 0}
+                  <div class="stat-desc">
+                    ≈ {formatUSD(result.totalBalance * result.info.usdPrice)} / {formatSOL(result.totalBalance * result.info.solPrice)}
+                  </div>
+                {/if}
+              </div>
+              
+              <div class="stat">
+                <div class="stat-title">Combined Percentage</div>
+                <div class="stat-value text-lg">{result.percentageOfSupply.toFixed(4)}%</div>
+                <div class="stat-desc">of total supply</div>
+              </div>
             </div>
-          {/each}
+
+            {#if result.balances.length > 0}
+              {@const chartData = prepareChartData(result.balances, result.totalSupply)}
+              <div class="mt-6">
+                <h4 class="font-semibold text-lg mb-4">Token Distribution</h4>
+                <div class="bg-base-300 rounded-box p-4 h-[400px]">
+                  <PieChart
+                    data={chartData} 
+                    key="address" 
+                    value="percentage" 
+                    cRange={chartData.map((d) => d.color)}
+                  />
+                </div>
+              </div>
+            {/if}
+
+            <div class="divider">Wallet Details</div>
+
+            <div class="overflow-x-auto">
+              <table class="table table-zebra w-full">
+                <thead>
+                  <tr>
+                    <th>Wallet</th>
+                    <th>Balance</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each result.balances as { address, balance, percentage, error: balanceError }}
+                    <tr>
+                      <td class="font-mono text-sm">{address}</td>
+                      <td>
+                        {#if balanceError}
+                          <div class="text-error">{balanceError}</div>
+                        {:else}
+                          <div>
+                            {balance.toLocaleString()} ({percentage.toFixed(4)}%)
+                            {#if result.info && result.info.usdPrice > 0}
+                              <div class="text-sm opacity-75">
+                                ≈ {formatUSD(balance * result.info.usdPrice)} / {formatSOL(balance * result.info.solPrice)}
+                              </div>
+                            {/if}
+                          </div>
+                        {/if}
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-      </div>
-    {/each}
-  </div>
+      {/each}
+    </div>
   {/if}
-  </div>
-  {/if}
+</div>
+{/if}
