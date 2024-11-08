@@ -20,6 +20,15 @@
     solPrice: number;
   }
 
+  interface TokenResults {
+    address: string;
+    info: TokenInfo | null;
+    totalSupply: number;
+    balances: TokenBalance[];
+    totalBalance: number;
+    percentageOfSupply: number;
+  }
+
   let tokenInfo: TokenInfo | null = null;
   const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
@@ -32,16 +41,14 @@
   // Initialize without defaults
   let walletAddresses = '';
   let connectionUrl = '';
-  let tokenAddress = '';
+  let tokenAddresses = '';
 
   // Other state variables
-  let totalBalance = 0;
   let loading = false;
   let error = '';
   let individualBalances:TokenBalance[] = [];
-  let totalSupply = 0;
-  let percentageOfSupply = 0;
   let duplicatesRemoved = 0;
+  let tokenResults: TokenResults[] = [];
 
   let connection:Connection;
 
@@ -49,7 +56,7 @@
   onMount(() => {
     if (browser) {
       connectionUrl = localStorage.getItem('connectionUrl') || DEFAULT_RPC;
-      tokenAddress = localStorage.getItem('tokenAddress') || DEFAULT_TOKEN;
+      tokenAddresses = localStorage.getItem('tokenAddresses') || DEFAULT_TOKEN;
       walletAddresses = localStorage.getItem('walletAddresses') || '';
       isInitialized = true;
     }
@@ -58,7 +65,7 @@
   // Save values whenever they change, but only in browser
   $: if (browser && isInitialized) {
     localStorage.setItem('connectionUrl', connectionUrl);
-    localStorage.setItem('tokenAddress', tokenAddress);
+    localStorage.setItem('tokenAddresses', tokenAddresses);
     localStorage.setItem('walletAddresses', walletAddresses);
   }
     
@@ -121,7 +128,7 @@
     }
   }
 
-  async function getTokenBalance(walletAddress:string, totalSupply: number): Promise<TokenBalance> {
+  async function getTokenBalance(walletAddress:string, totalSupply: number, tokenAddress: string): Promise<TokenBalance> {
     try {
       const wallet = new PublicKey(walletAddress);
       const token = new PublicKey(tokenAddress);
@@ -206,33 +213,28 @@
       return;
     }
 
-    if (!tokenAddress.trim()) {
-      error = 'Please enter a token address';
-      return;
-    }
-
-    if (!isValidPublicKey(tokenAddress)) {
-      error = 'Invalid token address format';
+    if (!tokenAddresses.trim()) {
+      error = 'Please enter at least one token address';
       return;
     }
 
     loading = true;
     error = '';
-    totalBalance = 0;
-    totalSupply = 0;
-    percentageOfSupply = 0;
     duplicatesRemoved = 0;
-    tokenInfo = null;
 
     try {
-      // Get total supply and token info in parallel
-      const [supply, info] = await Promise.all([
-        getTotalSupply(tokenAddress),
-        getTokenInfo(tokenAddress)
-      ]);
+      // Split and clean token addresses
+      const tAddresses = tokenAddresses
+        .split('\n')
+        .map(addr => addr.trim())
+        .filter(addr => addr);
 
-      totalSupply = supply;
-      tokenInfo = info;
+      // Validate token addresses
+      for (const addr of tAddresses) {
+        if (!isValidPublicKey(addr)) {
+          throw new Error(`Invalid token address format: ${addr}`);
+        }
+      }
 
       // Split addresses and remove empty lines
       let addresses = walletAddresses
@@ -253,14 +255,40 @@
         }
       }
 
-      // Fetch all balances in parallel
-      const results = await Promise.all(
-        addresses.map(address => getTokenBalance(address, totalSupply))
+      // Fetch results for each token
+      const results: TokenResults[] = await Promise.all(
+        tAddresses.map(async (tokenAddr) => {
+          // Get token info and supply in parallel
+          const [info, supply] = await Promise.all([
+            getTokenInfo(tokenAddr),
+            getTotalSupply(tokenAddr)
+          ]);
+
+          // Get balances for all wallets
+          const balances = await Promise.all(
+            addresses.map(address => getTokenBalance(address, supply, tokenAddr))
+          );
+
+          const totalBalance = balances.reduce((sum, result) => sum + result.balance, 0);
+          const percentageOfSupply = supply > 0 ? (totalBalance / supply) * 100 : 0;
+
+          return {
+            address: tokenAddr,
+            info,
+            totalSupply: supply,
+            balances,
+            totalBalance,
+            percentageOfSupply
+          };
+        })
       );
 
-      individualBalances = results;
-      totalBalance = results.reduce((sum, result) => sum + result.balance, 0);
-      percentageOfSupply = totalSupply > 0 ? (totalBalance / totalSupply) * 100 : 0;
+      individualBalances = []; // Clear old results
+      results.forEach(result => {
+        individualBalances.push(...result.balances);
+      });
+
+      tokenResults = results;
     } catch (err) {
       error = `Error: ${err instanceof Error ? err.message : String(err)}`;
     } finally {
@@ -295,15 +323,14 @@
 
   <div class="mb-4">
     <label for="token" class="block mb-2">
-      SPL Token Address:
+      SPL Token Addresses (one per line):
     </label>
-    <input
-      type="text"
+    <textarea
       id="token"
-      bind:value={tokenAddress}
-      class="w-full p-2 border rounded font-mono"
-      placeholder="Enter SPL token address..."
-    />
+      bind:value={tokenAddresses}
+      class="w-full h-32 p-2 border rounded font-mono"
+      placeholder="Enter SPL token addresses..."
+    ></textarea>
     <p class="text-sm text-gray-600 mt-1">
       Default: PLIE governance token
     </p>
@@ -341,68 +368,69 @@
     </div>
   {/if}
 
-  {#if individualBalances.length > 0}
-    <div class="mt-6">
-      <h2 class="text-xl font-semibold mb-2">Results:</h2>
-      
-      <div class="mb-4 p-3 bg-gray-50 rounded-lg border">
-        <div class="text-lg font-medium">
-          Token Address: <span class="font-mono">{tokenAddress}</span>
+  {#if tokenResults.length > 0}
+  <div class="mt-6 space-y-8">
+    {#each tokenResults as result}
+      <div class="border rounded-lg p-4 bg-white shadow-sm">
+        <h3 class="text-xl font-semibold mb-4">Results for Token: {result.address}</h3>
+        
+        {#if result.info}
+        <div class="mb-4 p-3 bg-gray-50 rounded-lg border">
+            <div class="text-sm text-gray-600 mt-1">
+              {result.info.name} ({result.info.symbol})
+            </div>
+            {#if result.info.usdPrice > 0}
+              <div class="text-sm text-gray-600 mt-1">
+                Current Price: {formatUSD(result.info.usdPrice)} / {formatSOL(result.info.solPrice)}
+              </div>
+            {/if}
         </div>
-        {#if tokenInfo}
-          <div class="text-sm text-gray-600 mt-1">
-            {tokenInfo.name} ({tokenInfo.symbol})
-          </div>
-          {#if tokenInfo.usdPrice > 0}
-          <div class="text-sm text-gray-600 mt-1">
-            Current Price: {formatUSD(tokenInfo.usdPrice)} / {formatSOL(tokenInfo.solPrice)}
-          </div>
-          {/if}
         {/if}
-      </div>
-      
-      <div class="mb-4 space-y-2">
-        <div>
-          <strong>Total Supply:</strong> {totalSupply.toLocaleString()} { tokenInfo ? `$${tokenInfo.symbol}` : 'tokens' }
-          {#if tokenInfo && tokenInfo.usdPrice > 0}
-          <div class="text-sm text-gray-600">
-            MC: {formatUSD(totalSupply * tokenInfo.usdPrice)} / {formatSOL(totalSupply * tokenInfo.solPrice)}
-          </div>
-        {/if}
-        </div>
-        <div>
-          <strong>Total Balance:</strong> {totalBalance.toLocaleString()} { tokenInfo ? `$${tokenInfo.symbol}` : 'tokens' }
-          {#if tokenInfo && tokenInfo.usdPrice > 0}
-          <div class="text-sm text-gray-600">
-            ≈ {formatUSD(totalBalance * tokenInfo.usdPrice)} / {formatSOL(totalBalance * tokenInfo.solPrice)}
-          </div>
-          {/if}
-        </div>
-        <div>
-          <strong>Combined Percentage:</strong> {percentageOfSupply.toFixed(4)}% of total supply
-        </div>
-      </div>
-
-      <div class="border rounded">
-        {#each individualBalances as { address, balance, percentage, error: balanceError }}
-          <div class="p-2 border-b last:border-b-0">
-            <div class="font-mono text-sm break-all">{address}</div>
-            {#if balanceError}
-              <div class="text-red-600 text-sm">{balanceError}</div>
-            {:else}
-              <div class="text-sm">
-                {balance.toLocaleString()} { tokenInfo ? `$${tokenInfo.symbol}` : 'tokens' } ({percentage.toFixed(4)}% of supply)
-                {#if tokenInfo && tokenInfo.usdPrice > 0}
-                <div class="text-gray-600">
-                  ≈ {formatUSD(balance * tokenInfo.usdPrice)} / {formatSOL(balance * tokenInfo.solPrice)}
-                </div>
-                {/if}
+        
+        <div class="mb-4 space-y-2">
+          <div>
+            <strong>Total Supply:</strong> {result.totalSupply.toLocaleString()} tokens
+            {#if result.info && result.info.usdPrice > 0}
+              <div class="text-sm text-gray-600">
+                MC: {formatUSD(result.totalSupply * result.info.usdPrice)} / {formatSOL(result.totalSupply * result.info.solPrice)}
               </div>
             {/if}
           </div>
-        {/each}
+          <div>
+            <strong>Total Balance:</strong> {result.totalBalance.toLocaleString()} tokens
+            {#if result.info && result.info?.usdPrice > 0}
+              <div class="text-sm text-gray-600">
+                ≈ {formatUSD(result.totalBalance * result.info.usdPrice)} / {formatSOL(result.totalBalance * result.info.solPrice)}
+              </div>
+            {/if}
+          </div>
+          <div>
+            <strong>Combined Percentage:</strong> {result.percentageOfSupply.toFixed(4)}% of total supply
+          </div>
+        </div>
+
+        <div class="border rounded">
+          {#each result.balances as { address, balance, percentage, error: balanceError }}
+            <div class="p-2 border-b last:border-b-0">
+              <div class="font-mono text-sm break-all">{address}</div>
+              {#if balanceError}
+                <div class="text-red-600 text-sm">{balanceError}</div>
+              {:else}
+                <div class="text-sm">
+                  {balance.toLocaleString()} tokens ({percentage.toFixed(4)}% of supply)
+                  {#if result.info && result.info?.usdPrice > 0}
+                    <div class="text-gray-600">
+                      ≈ {formatUSD(balance * result.info.usdPrice)} / {formatSOL(balance * result.info.solPrice)}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
       </div>
-    </div>
+    {/each}
+  </div>
   {/if}
-</div>
-{/if}
+  </div>
+  {/if}
