@@ -33,7 +33,7 @@
 
   // Default values
   const DEFAULT_RPC = 'https://api.mainnet-beta.solana.com';
-  const DEFAULT_TOKEN = '92kxUXDsBQLy5ptGxtmH9CDYd5E6ZQynzf2eFPiUpump';
+  const DEFAULT_TOKEN = '92kxUXDsBQLy5ptGxtmH9CDYd5E6ZQynzf2eFPiUpump\nEb4orWUwSrsFcidrp5K3pWjibAJeocFyue191DhFpYkB';
 
   let isInitialized = false;  // Track initialization state
 
