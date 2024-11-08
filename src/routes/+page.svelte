@@ -418,108 +418,107 @@
   </div>
 
   {#if tokenResults.length > 0}
-    <div class="space-y-8">
-      {#each tokenResults as result}
-        <div class="card bg-base-200 shadow-xl">
-          <div class="card-body">
-            <h3 class="card-title text-primary text-2xl">
+  <div class="space-y-8">
+    {#each tokenResults as result}
+      <div class="card bg-base-200 shadow-xl">
+        <div class="card-body p-4">
+          <!-- Token Header -->
+          <div class="space-y-2">
+            <h3 class="card-title text-primary text-xl break-all">
               Token Results
-              <div class="badge badge-secondary font-mono text-xs">{result.address}</div>
             </h3>
-            
-            {#if result.info}
-              <div class="bg-base-300 rounded-box p-4">
-                <div class="text-lg font-semibold">
-                  {result.info.name} ({result.info.symbol})
-                </div>
-                {#if result.info.usdPrice > 0}
-                  <div class="text-sm opacity-75">
-                    Current Price: {formatUSD(result.info.usdPrice)} / {formatSOL(result.info.solPrice)}
-                  </div>
-                {/if}
-              </div>
-            {/if}
-            
-            <div class="stats stats-vertical lg:stats-horizontal shadow bg-base-300 w-full">
-              <div class="stat">
-                <div class="stat-title">Total Supply</div>
-                <div class="stat-value text-lg">{result.totalSupply.toLocaleString()}</div>
-                {#if result.info && result.info.usdPrice > 0}
-                  <div class="stat-desc">
-                    MC: {formatUSD(result.totalSupply * result.info.usdPrice)} / {formatSOL(result.totalSupply * result.info.solPrice)}
-                  </div>
-                {/if}
-              </div>
-              
-              <div class="stat">
-                <div class="stat-title">Total Balance</div>
-                <div class="stat-value text-lg">{result.totalBalance.toLocaleString()}</div>
-                {#if result.info && result.info.usdPrice > 0}
-                  <div class="stat-desc">
-                    ≈ {formatUSD(result.totalBalance * result.info.usdPrice)} / {formatSOL(result.totalBalance * result.info.solPrice)}
-                  </div>
-                {/if}
-              </div>
-              
-              <div class="stat">
-                <div class="stat-title">Combined Percentage</div>
-                <div class="stat-value text-lg">{result.percentageOfSupply.toFixed(4)}%</div>
-                <div class="stat-desc">of total supply</div>
-              </div>
-            </div>
-
-            {#if result.balances.length > 0}
-              {@const chartData = prepareChartData(result.balances, result.totalSupply)}
-              <div class="mt-6">
-                <h4 class="font-semibold text-lg mb-4">Token Distribution</h4>
-                <div class="bg-base-300 rounded-box p-4 h-[400px]">
-                  <PieChart
-                    data={chartData} 
-                    key="address" 
-                    value="percentage" 
-                    cRange={chartData.map((d) => d.color)}
-                  />
-                </div>
-              </div>
-            {/if}
-
-            <div class="divider">Wallet Details</div>
-
-            <div class="overflow-x-auto">
-              <table class="table table-zebra w-full">
-                <thead>
-                  <tr>
-                    <th>Wallet</th>
-                    <th>Balance</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each result.balances as { address, balance, percentage, error: balanceError }}
-                    <tr>
-                      <td class="font-mono text-sm">{address}</td>
-                      <td>
-                        {#if balanceError}
-                          <div class="text-error">{balanceError}</div>
-                        {:else}
-                          <div>
-                            {balance.toLocaleString()} ({percentage.toFixed(4)}%)
-                            {#if result.info && result.info.usdPrice > 0}
-                              <div class="text-sm opacity-75">
-                                ≈ {formatUSD(balance * result.info.usdPrice)} / {formatSOL(balance * result.info.solPrice)}
-                              </div>
-                            {/if}
-                          </div>
-                        {/if}
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
+            <div class="badge badge-secondary font-mono text-xs break-all">
+              {result.address}
             </div>
           </div>
+          
+          <!-- Token Info -->
+          {#if result.info}
+            <div class="bg-base-300 rounded-box p-3 mt-4">
+              <div class="text-base font-semibold">
+                {result.info.name} ({result.info.symbol})
+              </div>
+              {#if result.info?.usdPrice > 0}
+                <div class="text-sm opacity-75">
+                  Current Price: {formatUSD(result.info.usdPrice)} / {formatSOL(result.info.solPrice)}
+                </div>
+              {/if}
+            </div>
+          {/if}
+          
+          <!-- Stats -->
+          <div class="stats stats-vertical shadow bg-base-300 w-full mt-4">
+            <div class="stat">
+              <div class="stat-title">Total Supply</div>
+              <div class="stat-value text-base">{result.totalSupply.toLocaleString()}</div>
+              {#if result.info && result.info.usdPrice > 0}
+                <div class="stat-desc whitespace-normal">
+                  MC: {formatUSD(result.totalSupply * result.info.usdPrice)} / {formatSOL(result.totalSupply * result.info.solPrice)}
+                </div>
+              {/if}
+            </div>
+            
+            <div class="stat">
+              <div class="stat-title">Total Balance</div>
+              <div class="stat-value text-base">{result.totalBalance.toLocaleString()}</div>
+              {#if result.info && result.info.usdPrice > 0}
+                <div class="stat-desc whitespace-normal">
+                  ≈ {formatUSD(result.totalBalance * result.info.usdPrice)} / {formatSOL(result.totalBalance * result.info.solPrice)}
+                </div>
+              {/if}
+            </div>
+            
+            <div class="stat">
+              <div class="stat-title">Combined Percentage</div>
+              <div class="stat-value text-base">{result.percentageOfSupply.toFixed(4)}%</div>
+              <div class="stat-desc">of total supply</div>
+            </div>
+          </div>
+
+          <!-- Pie Chart -->
+          {#if result.balances.length > 0}
+            {@const chartData = prepareChartData(result.balances, result.totalSupply)}
+            <div class="mt-6">
+              <h4 class="font-semibold text-lg mb-4">Token Distribution</h4>
+              <div class="bg-base-300 rounded-box p-4 h-[300px]">
+                <PieChart
+                  data={chartData} 
+                  key="address" 
+                  value="percentage" 
+                  cRange={chartData.map((d) => d.color)}
+                />
+              </div>
+            </div>
+          {/if}
+
+          <!-- Wallet Details -->
+          <div class="divider">Wallet Details</div>
+
+          <div class="space-y-4">
+            {#each result.balances as { address, balance, percentage, error: balanceError }}
+              <div class="bg-base-300 rounded-box p-3">
+                <div class="font-mono text-xs break-all mb-2">{address}</div>
+                {#if balanceError}
+                  <div class="text-error text-sm">{balanceError}</div>
+                {:else}
+                  <div class="space-y-1">
+                    <div class="text-sm">
+                      {balance.toLocaleString()} ({percentage.toFixed(4)}%)
+                    </div>
+                    {#if result.info && result.info.usdPrice > 0}
+                      <div class="text-xs opacity-75">
+                        ≈ {formatUSD(balance * result.info.usdPrice)} / {formatSOL(balance * result.info.solPrice)}
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            {/each}
+          </div>
         </div>
-      {/each}
-    </div>
-  {/if}
+      </div>
+    {/each}
+  </div>
+{/if}
 </div>
 {/if}
