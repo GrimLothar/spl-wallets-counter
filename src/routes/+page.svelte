@@ -32,7 +32,7 @@
   const SOL_MINT = 'So11111111111111111111111111111111111111112';
 
   // Default values
-  const DEFAULT_RPC = 'https://api.mainnet-beta.solana.com';
+  const DEFAULT_RPC = 'https://solana-rpc.publicnode.com';
   const DEFAULT_TOKEN = '92kxUXDsBQLy5ptGxtmH9CDYd5E6ZQynzf2eFPiUpump\nEb4orWUwSrsFcidrp5K3pWjibAJeocFyue191DhFpYkB';
 
   let isInitialized = false;  // Track initialization state
